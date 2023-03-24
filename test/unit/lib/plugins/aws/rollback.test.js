@@ -4,14 +4,14 @@ const runServerless = require('../../../../utils/run-serverless');
 const AwsProvider = require('../../../../../lib/plugins/aws/provider');
 const AwsRollback = require('../../../../../lib/plugins/aws/rollback');
 const Serverless = require('../../../../../lib/serverless');
-const chai = require('chai');
-const assert = require('chai').assert;
-const sinon = require('sinon');
 
+const chai = require('chai');
+const sinon = require('sinon');
 chai.use(require('chai-as-promised'));
 chai.use(require('sinon-chai'));
 
 const expect = chai.expect;
+const assert = chai.assert;
 
 describe('AwsRollback', () => {
   let awsRollback;
@@ -34,15 +34,13 @@ describe('AwsRollback', () => {
     s3Key = `${prefix}/${serverless.service.service}/${provider.getStage()}`;
   };
 
-  beforeEach(() => {
+  beforeEach(() =>
     createInstance({
       stage: 'dev',
       region: 'us-east-1',
       timestamp: 1476779096930,
-    });
-
-    return Promise.resolve();
-  });
+    })
+  );
 
   afterEach(() => {
     serverless.pluginManager.spawn.restore();
@@ -59,9 +57,9 @@ describe('AwsRollback', () => {
     it('should run "before:rollback:initialize" hook promise chain in order', async () => {
       const validateStub = sinon.stub(awsRollback, 'validate').resolves();
 
-      return awsRollback.hooks['before:rollback:initialize']().then(() => {
-        expect(validateStub.calledOnce).to.be.equal(true);
-      });
+      await awsRollback.hooks['before:rollback:initialize']();
+
+      expect(validateStub).to.have.been.calledOnce;
     });
 
     it('should run "rollback:rollback" promise chain in order', async () => {
@@ -69,53 +67,45 @@ describe('AwsRollback', () => {
       const setStackToUpdateStub = sinon.stub(awsRollback, 'setStackToUpdate').resolves();
       const updateStackStub = sinon.stub(awsRollback, 'updateStack').resolves();
 
-      return awsRollback.hooks['rollback:rollback']().then(() => {
-        expect(setBucketNameStub.calledOnce).to.be.equal(true);
-        expect(setStackToUpdateStub.calledAfter(setBucketNameStub)).to.be.equal(true);
-        expect(updateStackStub.calledAfter(setStackToUpdateStub)).to.be.equal(true);
-      });
+      await awsRollback.hooks['rollback:rollback']();
+
+      expect(setBucketNameStub).to.have.been.calledOnce;
+      expect(setStackToUpdateStub).to.have.been.calledAfter(setBucketNameStub);
+      expect(updateStackStub).to.have.been.calledAfter(setStackToUpdateStub);
     });
 
     it('should run "deploy:list" if timestamp is not specified', async () => {
       const spawnDeployListStub = spawnStub.withArgs('deploy:list').resolves();
       awsRollback.options.timestamp = undefined;
 
-      return awsRollback.hooks['rollback:rollback']().then(() => {
-        expect(spawnDeployListStub.calledOnce).to.be.equal(true);
-      });
+      await awsRollback.hooks['rollback:rollback']();
+
+      expect(spawnDeployListStub).to.have.been.calledOnce;
     });
   });
 
   describe('#setStackToUpdate()', () => {
     it('should resolve when the timestamp argument is passed as a string', async () => {
-      createInstance({
-        stage: 'dev',
-        region: 'us-east-1',
-        timestamp: '1476779096930',
-      });
-
-      const s3Objects = [
-        {
-          // eslint-disable-next-line max-len
-          Key: 'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z/compiled-cloudformation-template.json',
-        },
-        {
-          Key: 'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z/test.zip',
-        },
-      ];
       const s3Response = {
-        Contents: s3Objects,
+        Contents: [
+          {
+            // eslint-disable-next-line max-len
+            Key: 'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z/compiled-cloudformation-template.json',
+          },
+          {
+            Key: 'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z/test.zip',
+          },
+        ],
       };
-
       sinon.stub(awsRollback.provider, 'request').resolves(s3Response);
 
-      return awsRollback.setStackToUpdate().then(() => {
-        expect(awsRollback.serverless.service.package.artifactDirectoryName).to.be.equal(
-          'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z'
-        );
+      await awsRollback.setStackToUpdate();
 
-        awsRollback.provider.request.restore();
-      });
+      expect(awsRollback.serverless.service.package.artifactDirectoryName).to.be.equal(
+        'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z'
+      );
+
+      awsRollback.provider.request.restore();
     });
 
     it('should reject in case no deployments are available', async () => {
@@ -124,93 +114,82 @@ describe('AwsRollback', () => {
       };
       const listObjectsStub = sinon.stub(awsRollback.provider, 'request').resolves(s3Response);
 
-      return awsRollback
-        .setStackToUpdate()
-        .then(() => {
+      await expect(
+        awsRollback.setStackToUpdate().then(() => {
           assert.isNotOk(true, 'setStackToUpdate should not resolve');
         })
-        .catch((error) => {
-          expect(error.code).to.equal('ROLLBACK_DEPLOYMENTS_NOT_FOUND');
-          expect(listObjectsStub.calledOnce).to.be.equal(true);
-          expect(
-            listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
-              Bucket: awsRollback.bucketName,
-              Prefix: `${s3Key}`,
-            })
-          ).to.be.equal(true);
-          awsRollback.provider.request.restore();
-        });
+      ).to.eventually.be.rejected.and.have.property('code', 'ROLLBACK_DEPLOYMENTS_NOT_FOUND');
+
+      expect(listObjectsStub).to.have.been.calledOnce;
+      expect(listObjectsStub).to.have.been.calledWithExactly('S3', 'listObjectsV2', {
+        Bucket: awsRollback.bucketName,
+        Prefix: s3Key,
+      });
+
+      awsRollback.provider.request.restore();
     });
 
     it('should reject in case this specific deployments is not available', async () => {
-      const s3Objects = [
-        {
-          // eslint-disable-next-line max-len
-          Key: 'serverless/rollback/dev/2000000000000-2016-10-18T08:24:56.930Z/compiled-cloudformation-template.json',
-        },
-        {
-          Key: 'serverless/rollback/dev/2000000000000-2016-10-18T08:24:56.930Z/test.zip',
-        },
-      ];
       const s3Response = {
-        Contents: s3Objects,
+        Contents: [
+          {
+            // eslint-disable-next-line max-len
+            Key: 'serverless/rollback/dev/2000000000000-2016-10-18T08:24:56.930Z/compiled-cloudformation-template.json',
+          },
+          {
+            Key: 'serverless/rollback/dev/2000000000000-2016-10-18T08:24:56.930Z/test.zip',
+          },
+        ],
       };
-
       const listObjectsStub = sinon.stub(awsRollback.provider, 'request').resolves(s3Response);
 
-      return awsRollback
-        .setStackToUpdate()
-        .then(() => {
+      await expect(
+        awsRollback.setStackToUpdate().then(() => {
           assert.isNotOk(true, 'setStackToUpdate should not resolve');
         })
-        .catch((error) => {
-          expect(error.code).to.equal('ROLLBACK_DEPLOYMENT_NOT_FOUND');
-          expect(listObjectsStub.calledOnce).to.be.equal(true);
-          expect(
-            listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
-              Bucket: awsRollback.bucketName,
-              Prefix: `${s3Key}`,
-            })
-          ).to.be.equal(true);
-          awsRollback.provider.request.restore();
-        });
+      ).to.eventually.be.rejected.and.have.property('code', 'ROLLBACK_DEPLOYMENT_NOT_FOUND');
+
+      expect(listObjectsStub).to.have.been.calledOnce;
+      expect(listObjectsStub).to.have.been.calledWithExactly('S3', 'listObjectsV2', {
+        Bucket: awsRollback.bucketName,
+        Prefix: s3Key,
+      });
+
+      awsRollback.provider.request.restore();
     });
 
     it('should resolve set the artifactDirectoryName and resolve', async () => {
-      const s3Objects = [
-        {
-          // eslint-disable-next-line max-len
-          Key: 'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z/compiled-cloudformation-template.json',
-        },
-        {
-          Key: 'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z/test.zip',
-        },
-      ];
       const s3Response = {
-        Contents: s3Objects,
+        Contents: [
+          {
+            // eslint-disable-next-line max-len
+            Key: 'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z/compiled-cloudformation-template.json',
+          },
+          {
+            Key: 'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z/test.zip',
+          },
+        ],
       };
-
       const listObjectsStub = sinon.stub(awsRollback.provider, 'request').resolves(s3Response);
 
-      return awsRollback.setStackToUpdate().then(() => {
-        expect(awsRollback.serverless.service.package.artifactDirectoryName).to.be.equal(
-          'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z'
-        );
-        expect(
-          listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
-            Bucket: awsRollback.bucketName,
-            Prefix: `${s3Key}`,
-          })
-        ).to.be.equal(true);
-        awsRollback.provider.request.restore();
+      await awsRollback.setStackToUpdate();
+
+      expect(awsRollback.serverless.service.package.artifactDirectoryName).to.be.equal(
+        'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z'
+      );
+      expect(listObjectsStub).to.be.calledWithExactly('S3', 'listObjectsV2', {
+        Bucket: awsRollback.bucketName,
+        Prefix: s3Key,
       });
+
+      awsRollback.provider.request.restore();
     });
   });
 });
 
 describe('test/unit/lib/plugins/aws/rollback.test.js', () => {
   it('Should gently handle error of listing objects from S3 bucket', async () => {
-    await expect(
+    return expect(
       runServerless({
         fixture: 'function',
         command: 'rollback',
