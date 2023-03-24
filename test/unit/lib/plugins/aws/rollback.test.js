@@ -8,7 +8,6 @@ const Serverless = require('../../../../../lib/serverless');
 const chai = require('chai');
 const sinon = require('sinon');
 chai.use(require('chai-as-promised'));
-chai.use(require('sinon-chai'));
 
 const expect = chai.expect;
 const assert = chai.assert;
@@ -59,7 +58,7 @@ describe('AwsRollback', () => {
 
       await awsRollback.hooks['before:rollback:initialize']();
 
-      expect(validateStub).to.have.been.calledOnce;
+      expect(validateStub.calledOnce).to.be.true;
     });
 
     it('should run "rollback:rollback" promise chain in order', async () => {
@@ -69,9 +68,9 @@ describe('AwsRollback', () => {
 
       await awsRollback.hooks['rollback:rollback']();
 
-      expect(setBucketNameStub).to.have.been.calledOnce;
-      expect(setStackToUpdateStub).to.have.been.calledAfter(setBucketNameStub);
-      expect(updateStackStub).to.have.been.calledAfter(setStackToUpdateStub);
+      expect(setBucketNameStub.calledOnce).to.be.true;
+      expect(setStackToUpdateStub.calledAfter(setBucketNameStub)).to.be.true;
+      expect(updateStackStub.calledAfter(setStackToUpdateStub)).to.be.true;
     });
 
     it('should run "deploy:list" if timestamp is not specified', async () => {
@@ -80,7 +79,7 @@ describe('AwsRollback', () => {
 
       await awsRollback.hooks['rollback:rollback']();
 
-      expect(spawnDeployListStub).to.have.been.calledOnce;
+      expect(spawnDeployListStub.calledOnce).to.be.true;
     });
   });
 
@@ -120,11 +119,11 @@ describe('AwsRollback', () => {
         })
       ).to.eventually.be.rejected.and.have.property('code', 'ROLLBACK_DEPLOYMENTS_NOT_FOUND');
 
-      expect(listObjectsStub).to.have.been.calledOnce;
-      expect(listObjectsStub).to.have.been.calledWithExactly('S3', 'listObjectsV2', {
+      expect(listObjectsStub.calledOnce).to.be.true;
+      expect(listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
         Bucket: awsRollback.bucketName,
         Prefix: s3Key,
-      });
+      })).to.be.true;
 
       awsRollback.provider.request.restore();
     });
@@ -149,11 +148,11 @@ describe('AwsRollback', () => {
         })
       ).to.eventually.be.rejected.and.have.property('code', 'ROLLBACK_DEPLOYMENT_NOT_FOUND');
 
-      expect(listObjectsStub).to.have.been.calledOnce;
-      expect(listObjectsStub).to.have.been.calledWithExactly('S3', 'listObjectsV2', {
+      expect(listObjectsStub.calledOnce).to.be.true;
+      expect(listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
         Bucket: awsRollback.bucketName,
         Prefix: s3Key,
-      });
+      })).to.be.true;
 
       awsRollback.provider.request.restore();
     });
@@ -177,10 +176,10 @@ describe('AwsRollback', () => {
       expect(awsRollback.serverless.service.package.artifactDirectoryName).to.be.equal(
         'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z'
       );
-      expect(listObjectsStub).to.be.calledWithExactly('S3', 'listObjectsV2', {
+      expect(listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
         Bucket: awsRollback.bucketName,
         Prefix: s3Key,
-      });
+      })).to.be.true;
 
       awsRollback.provider.request.restore();
     });
