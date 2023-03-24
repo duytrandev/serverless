@@ -120,10 +120,12 @@ describe('AwsRollback', () => {
       ).to.eventually.be.rejected.and.have.property('code', 'ROLLBACK_DEPLOYMENTS_NOT_FOUND');
 
       expect(listObjectsStub.calledOnce).to.be.true;
-      expect(listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
-        Bucket: awsRollback.bucketName,
-        Prefix: s3Key,
-      })).to.be.true;
+      expect(
+        listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
+          Bucket: awsRollback.bucketName,
+          Prefix: s3Key,
+        })
+      ).to.be.true;
 
       awsRollback.provider.request.restore();
     });
@@ -149,10 +151,12 @@ describe('AwsRollback', () => {
       ).to.eventually.be.rejected.and.have.property('code', 'ROLLBACK_DEPLOYMENT_NOT_FOUND');
 
       expect(listObjectsStub.calledOnce).to.be.true;
-      expect(listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
-        Bucket: awsRollback.bucketName,
-        Prefix: s3Key,
-      })).to.be.true;
+      expect(
+        listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
+          Bucket: awsRollback.bucketName,
+          Prefix: s3Key,
+        })
+      ).to.be.true;
 
       awsRollback.provider.request.restore();
     });
@@ -176,10 +180,12 @@ describe('AwsRollback', () => {
       expect(awsRollback.serverless.service.package.artifactDirectoryName).to.be.equal(
         'serverless/rollback/dev/1476779096930-2016-10-18T08:24:56.930Z'
       );
-      expect(listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
-        Bucket: awsRollback.bucketName,
-        Prefix: s3Key,
-      })).to.be.true;
+      expect(
+        listObjectsStub.calledWithExactly('S3', 'listObjectsV2', {
+          Bucket: awsRollback.bucketName,
+          Prefix: s3Key,
+        })
+      ).to.be.true;
 
       awsRollback.provider.request.restore();
     });

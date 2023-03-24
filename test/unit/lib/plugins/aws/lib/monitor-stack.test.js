@@ -1,6 +1,5 @@
 'use strict';
 
-
 const Serverless = require('../../../../../../lib/serverless');
 const AwsProvider = require('../../../../../../lib/plugins/aws/provider');
 const CLI = require('../../../../../../lib/classes/cli');
@@ -16,6 +15,28 @@ describe('monitorStack', () => {
   const serverless = new Serverless({ commands: [], options: {} });
   const awsPlugin = {};
 
+  let eventCounter = 0;
+  const defaultStackId = 'new-service-dev';
+  const defaultEvent = {
+    StackName: defaultStackId,
+    LogicalResourceId: defaultStackId,
+    ResourceType: 'AWS::CloudFormation::Stack',
+    Timestamp: new Date(),
+  };
+  const mockCfData = () => ({
+    StackId: defaultStackId,
+  });
+  const mockEvent = (_StackEvent = {}) => ({
+    StackEvents: [
+      {
+        EventId: `1a2b${(eventCounter++).toString().padStart(4, '0')}`, // generate a unique new event id each time
+        // ResourceStatus: 'a-resouce-status', // undefined by default
+        ...defaultEvent,
+        ..._StackEvent,
+      },
+    ],
+  });
+
   beforeEach(() => {
     const options = {
       stage: 'dev',
@@ -29,6 +50,8 @@ describe('monitorStack', () => {
     Object.assign(awsPlugin, monitorStack);
   });
 
+  afterEach(() => awsPlugin.provider.request.restore());
+
   describe('#monitorStack()', () => {
     it('should skip monitoring if the stack was already created', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
@@ -36,39 +59,13 @@ describe('monitorStack', () => {
       await awsPlugin.monitorStack('update', 'alreadyCreated', { frequency: 10 });
 
       expect(describeStackEventsStub.callCount).to.be.equal(0);
-      
-      awsPlugin.provider.request.restore();
     });
 
     it('should keep monitoring until CREATE_COMPLETE stack status', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'CREATE_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateFinishedEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'CREATE_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({ ResourceStatus: 'CREATE_IN_PROGRESS' });
+      const updateFinishedEvent = mockEvent({ ResourceStatus: 'CREATE_COMPLETE' });
 
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFinishedEvent);
@@ -82,44 +79,19 @@ describe('monitorStack', () => {
         })
       ).to.be.true;
       expect(stackStatus).to.be.equal('CREATE_COMPLETE');
-
-      awsPlugin.provider.request.restore();
     });
 
     it('should keep monitoring until UPDATE_COMPLETE stack status', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateFinishedEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({ ResourceStatus: 'CREATE_IN_PROGRESS' });
+      const updateFinishedEvent = mockEvent({ ResourceStatus: 'UPDATE_COMPLETE' });
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFinishedEvent);
 
       const stackStatus = await awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 });
-      
+
       expect(describeStackEventsStub.callCount).to.be.equal(2);
       expect(
         describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
@@ -127,39 +99,14 @@ describe('monitorStack', () => {
         })
       ).to.be.true;
       expect(stackStatus).to.be.equal('UPDATE_COMPLETE');
-      
-      awsPlugin.provider.request.restore();
     });
 
     it('should keep monitoring until DELETE_COMPLETE stack status', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateFinishedEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({ ResourceStatus: 'DELETE_IN_PROGRESS' });
+      const updateFinishedEvent = mockEvent({ ResourceStatus: 'DELETE_COMPLETE' });
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFinishedEvent);
 
@@ -172,57 +119,24 @@ describe('monitorStack', () => {
         })
       ).to.be.true;
       expect(stackStatus).to.be.equal('DELETE_COMPLETE');
-
-      awsPlugin.provider.request.restore();
     });
 
     it('should not stop monitoring on CREATE_COMPLETE nested stack status', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'CREATE_IN_PROGRESS',
-          },
-        ],
-      };
-      const nestedStackEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4z',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'nested-stack-name',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'CREATE_COMPLETE',
-          },
-        ],
-      };
-      const updateFinishedEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'CREATE_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({ ResourceStatus: 'CREATE_IN_PROGRESS' });
+      const nestedStackEvent = mockEvent({
+        LogicalResourceId: 'nested-stack-name',
+        ResourceStatus: 'CREATE_IN_PROGRESS',
+      });
+      const updateFinishedEvent = mockEvent({ ResourceStatus: 'CREATE_COMPLETE' });
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(nestedStackEvent);
       describeStackEventsStub.onCall(2).resolves(updateFinishedEvent);
 
       const stackStatus = await awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 });
-      
+
       expect(describeStackEventsStub.callCount).to.be.equal(3);
       expect(
         describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
@@ -230,57 +144,24 @@ describe('monitorStack', () => {
         })
       ).to.be.true;
       expect(stackStatus).to.be.equal('CREATE_COMPLETE');
-
-      awsPlugin.provider.request.restore();
     });
 
     it('should not stop monitoring on UPDATE_COMPLETE nested stack status', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_IN_PROGRESS',
-          },
-        ],
-      };
-      const nestedStackEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4z',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'nested-stack-name',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_COMPLETE',
-          },
-        ],
-      };
-      const updateFinishedEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({ ResourceStatus: 'UPDATE_IN_PROGRESS' });
+      const nestedStackEvent = mockEvent({
+        LogicalResourceId: 'nested-stack-name',
+        ResourceStatus: 'UPDATE_COMPLETE',
+      });
+      const updateFinishedEvent = mockEvent({ ResourceStatus: 'UPDATE_COMPLETE' });
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(nestedStackEvent);
       describeStackEventsStub.onCall(2).resolves(updateFinishedEvent);
 
       const stackStatus = await awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 });
-      
+
       expect(describeStackEventsStub.callCount).to.be.equal(3);
       expect(
         describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
@@ -288,57 +169,24 @@ describe('monitorStack', () => {
         })
       ).to.be.true;
       expect(stackStatus).to.be.equal('UPDATE_COMPLETE');
-      
-      awsPlugin.provider.request.restore();
     });
 
     it('should not stop monitoring on DELETE_COMPLETE nested stack status', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_IN_PROGRESS',
-          },
-        ],
-      };
-      const nestedStackEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4z',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'nested-stack-name',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_COMPLETE',
-          },
-        ],
-      };
-      const updateFinishedEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({ ResourceStatus: 'DELETE_IN_PROGRESS' });
+      const nestedStackEvent = mockEvent({
+        LogicalResourceId: 'nested-stack-name',
+        ResourceStatus: 'DELETE_COMPLETE',
+      });
+      const updateFinishedEvent = mockEvent({ ResourceStatus: 'DELETE_COMPLETE' });
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(nestedStackEvent);
       describeStackEventsStub.onCall(2).resolves(updateFinishedEvent);
 
       const stackStatus = await awsPlugin.monitorStack('delete', cfDataMock, { frequency: 10 });
-      
+
       expect(describeStackEventsStub.callCount).to.be.equal(3);
       expect(
         describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
@@ -346,30 +194,16 @@ describe('monitorStack', () => {
         })
       ).to.be.true;
       expect(stackStatus).to.be.equal('DELETE_COMPLETE');
-      
-      awsPlugin.provider.request.restore();
     });
 
     it('should keep monitoring until DELETE_COMPLETE or stack not found catch', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_IN_PROGRESS',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({ ResourceStatus: 'DELETE_IN_PROGRESS' });
       const stackNotFoundError = {
         message: 'Stack new-service-dev does not exist',
       };
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).rejects(stackNotFoundError);
 
@@ -382,65 +216,22 @@ describe('monitorStack', () => {
         })
       ).to.be.true;
       expect(stackStatus).to.be.equal('DELETE_COMPLETE');
-
-      awsPlugin.provider.request.restore();
     });
 
     it('should output all stack events information with the --verbose option', () => {
       awsPlugin.options.verbose = true;
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateFailedEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'mochaS3',
-            ResourceType: 'AWS::S3::Bucket',
-            Timestamp: new Date(),
-            ResourceStatus: 'CREATE_FAILED',
-            ResourceStatusReason: 'Bucket already exists',
-          },
-        ],
-      };
-      const updateRollbackEvent = {
-        StackEvents: [
-          {
-            EventId: '1i2j3k4l',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_ROLLBACK_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateRollbackComplete = {
-        StackEvents: [
-          {
-            EventId: '1m2n3o4p',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'ROLLBACK_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({ ResourceStatus: 'UPDATE_IN_PROGRESS' });
+      const updateFailedEvent = mockEvent({
+        LogicalResourceId: 'mochaS3',
+        ResourceType: 'AWS::S3::Bucket',
+        ResourceStatus: 'CREATE_FAILED',
+        ResourceStatusReason: 'Bucket already exists',
+      });
+      const updateRollbackEvent = mockEvent({ ResourceStatus: 'UPDATE_ROLLBACK_IN_PROGRESS' });
+      const updateRollbackComplete = mockEvent({ ResourceStatus: 'ROLLBACK_COMPLETE' });
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFailedEvent);
       describeStackEventsStub.onCall(2).resolves(updateRollbackEvent);
@@ -458,50 +249,16 @@ describe('monitorStack', () => {
             StackName: cfDataMock.StackId,
           })
         ).to.be.equal(true);
-        awsPlugin.provider.request.restore();
       });
     });
 
     it('should keep monitoring when 1st ResourceType is not "AWS::CloudFormation::Stack"', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const firstNoStackResourceTypeEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'somebucket',
-            ResourceType: 'AWS::S3::Bucket',
-            Timestamp: new Date(),
-          },
-        ],
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateComplete = {
-        StackEvents: [
-          {
-            EventId: '1m2n3o4p',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const firstNoStackResourceTypeEvent = mockEvent({ ResourceType: 'AWS::S3::Bucket' });
+      const updateStartEvent = mockEvent({ ResourceStatus: 'UPDATE_IN_PROGRESS' });
+      const updateComplete = mockEvent({ ResourceStatus: 'UPDATE_COMPLETE' });
+
       describeStackEventsStub.onCall(0).resolves(firstNoStackResourceTypeEvent);
       describeStackEventsStub.onCall(1).resolves(updateStartEvent);
       describeStackEventsStub.onCall(2).resolves(updateComplete);
@@ -514,15 +271,11 @@ describe('monitorStack', () => {
           StackName: cfDataMock.StackId,
         })
       ).to.be.true;
-
-      awsPlugin.provider.request.restore();
     });
 
     it('should catch describeStackEvents error if stack was not in deleting state', () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
+      const cfDataMock = mockCfData();
       const failedDescribeStackEvents = {
         message: 'Something went wrong.',
       };
@@ -536,60 +289,31 @@ describe('monitorStack', () => {
             StackName: cfDataMock.StackId,
           })
         ).to.be.equal(true);
-        awsPlugin.provider.request.restore();
       });
     });
 
     it('should throw an error and exit immediately if stack status is *_FAILED', () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            LogicalResourceId: 'mocha',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateFailedEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            LogicalResourceId: 'mochaS3',
-            ResourceType: 'S3::Bucket',
-            Timestamp: new Date(),
-            ResourceStatus: 'CREATE_FAILED',
-            ResourceStatusReason: 'Bucket already exists',
-          },
-        ],
-      };
-      const updateRollbackEvent = {
-        StackEvents: [
-          {
-            EventId: '1i2j3k4l',
-            LogicalResourceId: 'mocha',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_ROLLBACK_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateRollbackFailedEvent = {
-        StackEvents: [
-          {
-            EventId: '1m2n3o4p',
-            LogicalResourceId: 'mocha',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_ROLLBACK_FAILED',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({
+        LogicalResourceId: 'mocha',
+        ResourceStatus: 'UPDATE_IN_PROGRESS',
+      });
+      const updateFailedEvent = mockEvent({
+        LogicalResourceId: 'mochaS3',
+        ResourceType: 'S3::Bucket',
+        ResourceStatus: 'CREATE_FAILED',
+        ResourceStatusReason: 'Bucket already exists',
+      });
+      const updateRollbackEvent = mockEvent({
+        LogicalResourceId: 'mocha',
+        ResourceStatus: 'UPDATE_ROLLBACK_IN_PROGRESS',
+      });
+      const updateRollbackFailedEvent = mockEvent({
+        LogicalResourceId: 'mocha',
+        ResourceStatus: 'UPDATE_ROLLBACK_FAILED',
+      });
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFailedEvent);
       describeStackEventsStub.onCall(2).resolves(updateRollbackEvent);
@@ -607,64 +331,26 @@ describe('monitorStack', () => {
             StackName: cfDataMock.StackId,
           })
         ).to.be.equal(true);
-        awsPlugin.provider.request.restore();
       });
     });
 
     it('should throw an error and exit immediately if stack status is DELETE_FAILED', () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const deleteStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_IN_PROGRESS',
-          },
-        ],
-      };
-      const deleteItemEvent = {
-        StackEvents: [
-          {
-            EventId: '1e2f3g4h',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'mochaLambda',
-            ResourceType: 'AWS::Lambda::Function',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_IN_PROGRESS',
-          },
-        ],
-      };
-      const deleteItemFailedEvent = {
-        StackEvents: [
-          {
-            EventId: '1i2j3k4l',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'mochaLambda',
-            ResourceType: 'AWS::Lambda::Function',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_FAILED',
-            ResourceStatusReason: 'You are not authorized to perform this operation',
-          },
-        ],
-      };
-      const deleteFailedEvent = {
-        StackEvents: [
-          {
-            EventId: '1m2n3o4p',
-            StackName: 'new-service-dev',
-            LogicalResourceId: 'new-service-dev',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'DELETE_FAILED',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const deleteStartEvent = mockEvent({ ResourceStatus: 'DELETE_IN_PROGRESS' });
+      const deleteItemEvent = mockEvent({
+        LogicalResourceId: 'mochaLambda',
+        ResourceType: 'AWS::Lambda::Function',
+        ResourceStatus: 'DELETE_IN_PROGRESS',
+      });
+      const deleteItemFailedEvent = mockEvent({
+        LogicalResourceId: 'mochaLambda',
+        ResourceType: 'AWS::Lambda::Function',
+        ResourceStatus: 'DELETE_FAILED',
+        ResourceStatusReason: 'You are not authorized to perform this operation',
+      });
+      const deleteFailedEvent = mockEvent({ ResourceStatus: 'DELETE_FAILED' });
+
       describeStackEventsStub.onCall(0).resolves(deleteStartEvent);
       describeStackEventsStub.onCall(1).resolves(deleteItemEvent);
       describeStackEventsStub.onCall(2).resolves(deleteItemFailedEvent);
@@ -682,7 +368,6 @@ describe('monitorStack', () => {
             StackName: cfDataMock.StackId,
           })
         ).to.be.equal(true);
-        awsPlugin.provider.request.restore();
       });
     });
 
@@ -692,58 +377,21 @@ describe('monitorStack', () => {
       () => {
         awsPlugin.options.verbose = true;
         const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-        const cfDataMock = {
-          StackId: 'new-service-dev',
-        };
-        const deleteStartEvent = {
-          StackEvents: [
-            {
-              EventId: '1a2b3c4d',
-              StackName: 'new-service-dev',
-              LogicalResourceId: 'new-service-dev',
-              ResourceType: 'AWS::CloudFormation::Stack',
-              Timestamp: new Date(),
-              ResourceStatus: 'DELETE_IN_PROGRESS',
-            },
-          ],
-        };
-        const deleteItemEvent = {
-          StackEvents: [
-            {
-              EventId: '1e2f3g4h',
-              StackName: 'new-service-dev',
-              LogicalResourceId: 'mochaLambda',
-              ResourceType: 'AWS::Lambda::Function',
-              Timestamp: new Date(),
-              ResourceStatus: 'DELETE_IN_PROGRESS',
-            },
-          ],
-        };
-        const deleteItemFailedEvent = {
-          StackEvents: [
-            {
-              EventId: '1i2j3k4l',
-              StackName: 'new-service-dev',
-              LogicalResourceId: 'mochaLambda',
-              ResourceType: 'AWS::Lambda::Function',
-              Timestamp: new Date(),
-              ResourceStatus: 'DELETE_FAILED',
-              ResourceStatusReason: 'You are not authorized to perform this operation',
-            },
-          ],
-        };
-        const deleteFailedEvent = {
-          StackEvents: [
-            {
-              EventId: '1m2n3o4p',
-              StackName: 'new-service-dev',
-              LogicalResourceId: 'new-service-dev',
-              ResourceType: 'AWS::CloudFormation::Stack',
-              Timestamp: new Date(),
-              ResourceStatus: 'DELETE_FAILED',
-            },
-          ],
-        };
+        const cfDataMock = mockCfData();
+        const deleteStartEvent = mockEvent({ ResourceStatus: 'DELETE_IN_PROGRESS' });
+        const deleteItemEvent = mockEvent({
+          LogicalResourceId: 'mochaLambda',
+          ResourceType: 'AWS::Lambda::Function',
+          ResourceStatus: 'DELETE_IN_PROGRESS',
+        });
+        const deleteItemFailedEvent = mockEvent({
+          LogicalResourceId: 'mochaLambda',
+          ResourceType: 'AWS::Lambda::Function',
+          ResourceStatus: 'DELETE_FAILED',
+          ResourceStatusReason: 'You are not authorized to perform this operation',
+        });
+        const deleteFailedEvent = mockEvent({ ResourceStatus: 'DELETE_FAILED' });
+
         describeStackEventsStub.onCall(0).resolves(deleteStartEvent);
         describeStackEventsStub.onCall(1).resolves(deleteItemEvent);
         describeStackEventsStub.onCall(2).resolves(deleteItemFailedEvent);
@@ -761,7 +409,6 @@ describe('monitorStack', () => {
               StackName: cfDataMock.StackId,
             })
           ).to.be.equal(true);
-          awsPlugin.provider.request.restore();
         });
       }
     );
@@ -772,21 +419,8 @@ describe('monitorStack', () => {
       async () => {
         awsPlugin.options.verbose = true;
         const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-        const cfDataMock = {
-          StackId: 'new-service-dev',
-        };
-        const createStartEvent = {
-          StackEvents: [
-            {
-              EventId: '1a2b3c4d',
-              StackName: 'new-service-dev',
-              LogicalResourceId: 'new-service-dev',
-              ResourceType: 'AWS::CloudFormation::Stack',
-              Timestamp: new Date(),
-              ResourceStatus: 'CREATE_IN_PROGRESS',
-            },
-          ],
-        };
+        const cfDataMock = mockCfData();
+        const createStartEvent = mockEvent({ ResourceStatus: 'CREATE_IN_PROGRESS' });
         const createItemFailedEvent = {
           StackEvents: [
             {
@@ -813,7 +447,6 @@ describe('monitorStack', () => {
               Timestamp: new Date(),
               ResourceStatus: 'DELETE_IN_PROGRESS',
             },
-
             {
               EventId: '1e2f3g4h',
               StackName: 'new-service-dev',
@@ -825,23 +458,20 @@ describe('monitorStack', () => {
             },
           ],
         };
+
         describeStackEventsStub.onCall(0).resolves(createStartEvent);
         describeStackEventsStub.onCall(1).resolves(createItemFailedEvent);
 
         await expect(
           awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 })
         ).to.eventually.be.rejectedWith('myBucket - Invalid Property for X.');
-
-        awsPlugin.provider.request.restore();
       }
     );
 
     it('should resolve properly first stack event (when CREATE fails and is followed with DELETE)', async () => {
       awsPlugin.options.verbose = true;
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
+      const cfDataMock = mockCfData();
       const createStartEvent = {
         StackEvents: [
           {
@@ -868,7 +498,6 @@ describe('monitorStack', () => {
             Timestamp: new Date(),
             ResourceStatus: 'DELETE_IN_PROGRESS',
           },
-
           {
             EventId: '1e2f3g4h',
             StackName: 'new-service-dev',
@@ -894,48 +523,24 @@ describe('monitorStack', () => {
       await expect(
         awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 })
       ).to.eventually.be.rejectedWith('myBucket - Invalid Property for X.');
-
-      awsPlugin.provider.request.restore();
     });
 
     it('should record an error and fail if status is UPDATE_ROLLBACK_IN_PROGRESS', () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
-      const cfDataMock = {
-        StackId: 'new-service-dev',
-      };
-      const updateStartEvent = {
-        StackEvents: [
-          {
-            EventId: '1a2b3c4d',
-            LogicalResourceId: 'mocha',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateRollbackEvent = {
-        StackEvents: [
-          {
-            EventId: '1i2j3k4l',
-            LogicalResourceId: 'mocha',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_ROLLBACK_IN_PROGRESS',
-          },
-        ],
-      };
-      const updateRollbackCompleteEvent = {
-        StackEvents: [
-          {
-            EventId: '1m2n3o4p',
-            LogicalResourceId: 'mocha',
-            ResourceType: 'AWS::CloudFormation::Stack',
-            Timestamp: new Date(),
-            ResourceStatus: 'UPDATE_ROLLBACK_COMPLETE',
-          },
-        ],
-      };
+      const cfDataMock = mockCfData();
+      const updateStartEvent = mockEvent({
+        LogicalResourceId: 'mocha',
+        ResourceStatus: 'CREATE_IN_PROGRESS',
+      });
+      const updateRollbackEvent = mockEvent({
+        LogicalResourceId: 'mocha',
+        ResourceStatus: 'UPDATE_ROLLBACK_IN_PROGRESS',
+      });
+      const updateRollbackCompleteEvent = mockEvent({
+        LogicalResourceId: 'mocha',
+        ResourceStatus: 'UPDATE_ROLLBACK_COMPLETE',
+      });
+
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateRollbackEvent);
       describeStackEventsStub.onCall(2).resolves(updateRollbackCompleteEvent);
@@ -952,7 +557,6 @@ describe('monitorStack', () => {
             StackName: cfDataMock.StackId,
           })
         ).to.be.equal(true);
-        awsPlugin.provider.request.restore();
       });
     });
   });
