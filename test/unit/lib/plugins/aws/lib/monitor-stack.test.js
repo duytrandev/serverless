@@ -1,15 +1,16 @@
 'use strict';
 
-const chai = require('chai');
-const sinon = require('sinon');
+
 const Serverless = require('../../../../../../lib/serverless');
 const AwsProvider = require('../../../../../../lib/plugins/aws/provider');
 const CLI = require('../../../../../../lib/classes/cli');
 const monitorStack = require('../../../../../../lib/plugins/aws/lib/monitor-stack');
 
+const chai = require('chai');
+const sinon = require('sinon');
 chai.use(require('chai-as-promised'));
 
-const { expect } = chai;
+const expect = chai.expect;
 
 describe('monitorStack', () => {
   const serverless = new Serverless({ commands: [], options: {} });
@@ -32,10 +33,11 @@ describe('monitorStack', () => {
     it('should skip monitoring if the stack was already created', async () => {
       const describeStackEventsStub = sinon.stub(awsPlugin.provider, 'request');
 
-      return awsPlugin.monitorStack('update', 'alreadyCreated', { frequency: 10 }).then(() => {
-        expect(describeStackEventsStub.callCount).to.be.equal(0);
-        awsPlugin.provider.request.restore();
-      });
+      await awsPlugin.monitorStack('update', 'alreadyCreated', { frequency: 10 });
+
+      expect(describeStackEventsStub.callCount).to.be.equal(0);
+      
+      awsPlugin.provider.request.restore();
     });
 
     it('should keep monitoring until CREATE_COMPLETE stack status', async () => {
@@ -71,16 +73,17 @@ describe('monitorStack', () => {
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFinishedEvent);
 
-      return awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 }).then((stackStatus) => {
-        expect(describeStackEventsStub.callCount).to.be.equal(2);
-        expect(
-          describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
-            StackName: cfDataMock.StackId,
-          })
-        ).to.be.equal(true);
-        expect(stackStatus).to.be.equal('CREATE_COMPLETE');
-        awsPlugin.provider.request.restore();
-      });
+      const stackStatus = await awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 });
+
+      expect(describeStackEventsStub.callCount).to.be.equal(2);
+      expect(
+        describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
+          StackName: cfDataMock.StackId,
+        })
+      ).to.be.true;
+      expect(stackStatus).to.be.equal('CREATE_COMPLETE');
+
+      awsPlugin.provider.request.restore();
     });
 
     it('should keep monitoring until UPDATE_COMPLETE stack status', async () => {
@@ -112,20 +115,20 @@ describe('monitorStack', () => {
           },
         ],
       };
-
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFinishedEvent);
 
-      return awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 }).then((stackStatus) => {
-        expect(describeStackEventsStub.callCount).to.be.equal(2);
-        expect(
-          describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
-            StackName: cfDataMock.StackId,
-          })
-        ).to.be.equal(true);
-        expect(stackStatus).to.be.equal('UPDATE_COMPLETE');
-        awsPlugin.provider.request.restore();
-      });
+      const stackStatus = await awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 });
+      
+      expect(describeStackEventsStub.callCount).to.be.equal(2);
+      expect(
+        describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
+          StackName: cfDataMock.StackId,
+        })
+      ).to.be.true;
+      expect(stackStatus).to.be.equal('UPDATE_COMPLETE');
+      
+      awsPlugin.provider.request.restore();
     });
 
     it('should keep monitoring until DELETE_COMPLETE stack status', async () => {
@@ -157,20 +160,20 @@ describe('monitorStack', () => {
           },
         ],
       };
-
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFinishedEvent);
 
-      return awsPlugin.monitorStack('delete', cfDataMock, { frequency: 10 }).then((stackStatus) => {
-        expect(describeStackEventsStub.callCount).to.be.equal(2);
-        expect(
-          describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
-            StackName: cfDataMock.StackId,
-          })
-        ).to.be.equal(true);
-        expect(stackStatus).to.be.equal('DELETE_COMPLETE');
-        awsPlugin.provider.request.restore();
-      });
+      const stackStatus = await awsPlugin.monitorStack('delete', cfDataMock, { frequency: 10 });
+
+      expect(describeStackEventsStub.callCount).to.be.equal(2);
+      expect(
+        describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
+          StackName: cfDataMock.StackId,
+        })
+      ).to.be.true;
+      expect(stackStatus).to.be.equal('DELETE_COMPLETE');
+
+      awsPlugin.provider.request.restore();
     });
 
     it('should not stop monitoring on CREATE_COMPLETE nested stack status', async () => {
@@ -214,21 +217,21 @@ describe('monitorStack', () => {
           },
         ],
       };
-
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(nestedStackEvent);
       describeStackEventsStub.onCall(2).resolves(updateFinishedEvent);
 
-      return awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 }).then((stackStatus) => {
-        expect(describeStackEventsStub.callCount).to.be.equal(3);
-        expect(
-          describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
-            StackName: cfDataMock.StackId,
-          })
-        ).to.be.equal(true);
-        expect(stackStatus).to.be.equal('CREATE_COMPLETE');
-        awsPlugin.provider.request.restore();
-      });
+      const stackStatus = await awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 });
+      
+      expect(describeStackEventsStub.callCount).to.be.equal(3);
+      expect(
+        describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
+          StackName: cfDataMock.StackId,
+        })
+      ).to.be.true;
+      expect(stackStatus).to.be.equal('CREATE_COMPLETE');
+
+      awsPlugin.provider.request.restore();
     });
 
     it('should not stop monitoring on UPDATE_COMPLETE nested stack status', async () => {
@@ -272,21 +275,21 @@ describe('monitorStack', () => {
           },
         ],
       };
-
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(nestedStackEvent);
       describeStackEventsStub.onCall(2).resolves(updateFinishedEvent);
 
-      return awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 }).then((stackStatus) => {
-        expect(describeStackEventsStub.callCount).to.be.equal(3);
-        expect(
-          describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
-            StackName: cfDataMock.StackId,
-          })
-        ).to.be.equal(true);
-        expect(stackStatus).to.be.equal('UPDATE_COMPLETE');
-        awsPlugin.provider.request.restore();
-      });
+      const stackStatus = await awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 });
+      
+      expect(describeStackEventsStub.callCount).to.be.equal(3);
+      expect(
+        describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
+          StackName: cfDataMock.StackId,
+        })
+      ).to.be.true;
+      expect(stackStatus).to.be.equal('UPDATE_COMPLETE');
+      
+      awsPlugin.provider.request.restore();
     });
 
     it('should not stop monitoring on DELETE_COMPLETE nested stack status', async () => {
@@ -330,21 +333,21 @@ describe('monitorStack', () => {
           },
         ],
       };
-
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(nestedStackEvent);
       describeStackEventsStub.onCall(2).resolves(updateFinishedEvent);
 
-      return awsPlugin.monitorStack('delete', cfDataMock, { frequency: 10 }).then((stackStatus) => {
-        expect(describeStackEventsStub.callCount).to.be.equal(3);
-        expect(
-          describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
-            StackName: cfDataMock.StackId,
-          })
-        ).to.be.equal(true);
-        expect(stackStatus).to.be.equal('DELETE_COMPLETE');
-        awsPlugin.provider.request.restore();
-      });
+      const stackStatus = await awsPlugin.monitorStack('delete', cfDataMock, { frequency: 10 });
+      
+      expect(describeStackEventsStub.callCount).to.be.equal(3);
+      expect(
+        describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
+          StackName: cfDataMock.StackId,
+        })
+      ).to.be.true;
+      expect(stackStatus).to.be.equal('DELETE_COMPLETE');
+      
+      awsPlugin.provider.request.restore();
     });
 
     it('should keep monitoring until DELETE_COMPLETE or stack not found catch', async () => {
@@ -367,20 +370,20 @@ describe('monitorStack', () => {
       const stackNotFoundError = {
         message: 'Stack new-service-dev does not exist',
       };
-
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).rejects(stackNotFoundError);
 
-      return awsPlugin.monitorStack('delete', cfDataMock, { frequency: 10 }).then((stackStatus) => {
-        expect(describeStackEventsStub.callCount).to.be.equal(2);
-        expect(
-          describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
-            StackName: cfDataMock.StackId,
-          })
-        ).to.be.equal(true);
-        expect(stackStatus).to.be.equal('DELETE_COMPLETE');
-        awsPlugin.provider.request.restore();
-      });
+      const stackStatus = await awsPlugin.monitorStack('delete', cfDataMock, { frequency: 10 });
+
+      expect(describeStackEventsStub.callCount).to.be.equal(2);
+      expect(
+        describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
+          StackName: cfDataMock.StackId,
+        })
+      ).to.be.true;
+      expect(stackStatus).to.be.equal('DELETE_COMPLETE');
+
+      awsPlugin.provider.request.restore();
     });
 
     it('should output all stack events information with the --verbose option', () => {
@@ -503,15 +506,16 @@ describe('monitorStack', () => {
       describeStackEventsStub.onCall(1).resolves(updateStartEvent);
       describeStackEventsStub.onCall(2).resolves(updateComplete);
 
-      return awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 }).then(() => {
-        expect(describeStackEventsStub.callCount).to.be.equal(3);
-        expect(
-          describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
-            StackName: cfDataMock.StackId,
-          })
-        ).to.be.equal(true);
-        awsPlugin.provider.request.restore();
-      });
+      await awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 });
+
+      expect(describeStackEventsStub.callCount).to.be.equal(3);
+      expect(
+        describeStackEventsStub.calledWithExactly('CloudFormation', 'describeStackEvents', {
+          StackName: cfDataMock.StackId,
+        })
+      ).to.be.true;
+
+      awsPlugin.provider.request.restore();
     });
 
     it('should catch describeStackEvents error if stack was not in deleting state', () => {
@@ -522,7 +526,6 @@ describe('monitorStack', () => {
       const failedDescribeStackEvents = {
         message: 'Something went wrong.',
       };
-
       describeStackEventsStub.onCall(0).rejects(failedDescribeStackEvents);
 
       return awsPlugin.monitorStack('update', cfDataMock, { frequency: 10 }).catch((e) => {
@@ -587,7 +590,6 @@ describe('monitorStack', () => {
           },
         ],
       };
-
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateFailedEvent);
       describeStackEventsStub.onCall(2).resolves(updateRollbackEvent);
@@ -663,7 +665,6 @@ describe('monitorStack', () => {
           },
         ],
       };
-
       describeStackEventsStub.onCall(0).resolves(deleteStartEvent);
       describeStackEventsStub.onCall(1).resolves(deleteItemEvent);
       describeStackEventsStub.onCall(2).resolves(deleteItemFailedEvent);
@@ -743,7 +744,6 @@ describe('monitorStack', () => {
             },
           ],
         };
-
         describeStackEventsStub.onCall(0).resolves(deleteStartEvent);
         describeStackEventsStub.onCall(1).resolves(deleteItemEvent);
         describeStackEventsStub.onCall(2).resolves(deleteItemFailedEvent);
@@ -825,13 +825,13 @@ describe('monitorStack', () => {
             },
           ],
         };
-
         describeStackEventsStub.onCall(0).resolves(createStartEvent);
         describeStackEventsStub.onCall(1).resolves(createItemFailedEvent);
 
         await expect(
           awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 })
         ).to.eventually.be.rejectedWith('myBucket - Invalid Property for X.');
+
         awsPlugin.provider.request.restore();
       }
     );
@@ -894,6 +894,7 @@ describe('monitorStack', () => {
       await expect(
         awsPlugin.monitorStack('create', cfDataMock, { frequency: 10 })
       ).to.eventually.be.rejectedWith('myBucket - Invalid Property for X.');
+
       awsPlugin.provider.request.restore();
     });
 
@@ -935,7 +936,6 @@ describe('monitorStack', () => {
           },
         ],
       };
-
       describeStackEventsStub.onCall(0).resolves(updateStartEvent);
       describeStackEventsStub.onCall(1).resolves(updateRollbackEvent);
       describeStackEventsStub.onCall(2).resolves(updateRollbackCompleteEvent);
