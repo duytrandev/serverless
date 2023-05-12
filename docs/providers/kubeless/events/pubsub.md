@@ -25,7 +25,7 @@ service: hello
 
 provider:
   name: kubeless
-  runtime: python2.7
+  runtime: python3.10
 
 plugins:
   - serverless-kubeless

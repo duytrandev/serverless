@@ -440,11 +440,11 @@ describe('AwsInvokeLocal', () => {
       ).to.be.equal(true);
     });
 
-    it('should call invokeLocalPython when python2.7 runtime is set', async () => {
-      awsInvokeLocal.options.functionObj.runtime = 'python2.7';
+    it('should call invokeLocalPython when python3.7 runtime is set', async () => {
+      awsInvokeLocal.options.functionObj.runtime = 'python3.7';
       await awsInvokeLocal.invokeLocal();
       // NOTE: this is important so that tests on Windows won't fail
-      const runtime = process.platform === 'win32' ? 'python.exe' : 'python2.7';
+      const runtime = process.platform === 'win32' ? 'python.exe' : 'python3.7';
       expect(invokeLocalPythonStub.calledOnce).to.be.equal(true);
       expect(
         invokeLocalPythonStub.calledWithExactly(runtime, 'handler', 'hello', {}, undefined)

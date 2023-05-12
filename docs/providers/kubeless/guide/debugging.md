@@ -44,7 +44,7 @@ And its corresponding Serverless YAML file:
 service: bikesearch
 provider:
   name: kubeless
-  runtime: python2.7
+  runtime: python3.10
 
 plugins:
   - serverless-kubeless
